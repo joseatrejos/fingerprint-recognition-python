@@ -92,28 +92,3 @@ def open_images(img_paths):
     Open images from given paths and return them as grayscale images.
     """
     return [cv.imread(img_path, cv.IMREAD_GRAYSCALE) for img_path in img_paths]
-
-
-if __name__ == "__main__":
-    img_paths = [
-        f"""{os.getenv("IMAGE_PATH")}/huella1.png""", 
-        f"""{os.getenv("IMAGE_PATH")}/huella2.png"""
-    ]
-    output_dir = "./output/"
-
-    # Open images in grayscale
-    images = open_images(img_paths)
-
-    # Process images
-    processed_images = []
-    minutiae_sets = []
-    os.makedirs(output_dir, exist_ok=True)
-    
-    for i, img in enumerate(tqdm(images)):
-        results, minutiae_points = preprocess_image(img)
-        processed_images.append(results)
-        minutiae_sets.append(minutiae_points)
-
-    # Match minutiae and compute dissimilarity
-    dissimilarity_index = compute_dissimilarity(minutiae_sets[0], minutiae_sets[1])
-    print(f"Dissimilarity Index: {dissimilarity_index}")

@@ -61,7 +61,7 @@ def fingerprint_pipeline(input_img):
 
 if __name__ == '__main__':
     # Open images
-    img_paths = ['./huella1.png', './huella2.png']
+    img_paths = ['./sample_inputs/huella1.png', './sample_inputs/huella2.png']
     output_dir = './output/'
 
     def open_images(paths):

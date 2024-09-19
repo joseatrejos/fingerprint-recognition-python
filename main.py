@@ -11,6 +11,7 @@ from utils import orientation
 from utils.crossing_number import calculate_minutiaes
 from tqdm import tqdm
 from utils.skeletonize import skeletonize
+from utils.match_templates import match_templates
 
 
 def fingerprint_pipeline(input_img):
@@ -61,7 +62,9 @@ def fingerprint_pipeline(input_img):
 
 if __name__ == '__main__':
     # Open images
-    img_paths = ['./sample_inputs/huella1.png', './sample_inputs/huella2.png']
+    img_paths = ['./input/huella1.png', './input/huella2.png']
+    captured_template = cv.imread(img_paths[0], 0)
+    stored_template = cv.imread(img_paths[1], 0)
     output_dir = './output/'
 
     def open_images(paths):
@@ -73,5 +76,10 @@ if __name__ == '__main__':
     os.makedirs(output_dir, exist_ok=True)
     for i, img in enumerate(tqdm(images)):
         results = fingerprint_pipeline(img)
+
+        # Finally, calculate the dissimilarity score between the two fingerprints
+        score = match_templates(results)
+        print(f'Dissimilarity score: {score}')
+
         cv.imwrite(os.path.join(output_dir, f'{i}.png'), results)
         # cv.imshow('image pipeline', results); cv.waitKeyEx()

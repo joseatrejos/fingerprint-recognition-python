@@ -48,9 +48,9 @@ def minutiae_at(pixels, i, j, kernel_size):
 
 
 def calculate_minutiaes(im, kernel_size=3):
-    biniry_image = np.zeros_like(im)
-    biniry_image[im<10] = 1.0
-    biniry_image = biniry_image.astype(np.int8)
+    binary_image = np.zeros_like(im)
+    binary_image[im<10] = 1.0
+    binary_image = binary_image.astype(np.int8)
 
     (y, x) = im.shape
     result = cv.cvtColor(im, cv.COLOR_GRAY2RGB)
@@ -59,7 +59,7 @@ def calculate_minutiaes(im, kernel_size=3):
     # iterate each pixel minutia
     for i in range(1, x - kernel_size//2):
         for j in range(1, y - kernel_size//2):
-            minutiae = minutiae_at(biniry_image, j, i, kernel_size)
+            minutiae = minutiae_at(binary_image, j, i, kernel_size)
             if minutiae != "none":
                 cv.circle(result, (i,j), radius=2, color=colors[minutiae], thickness=2)
 

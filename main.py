@@ -1,57 +1,84 @@
+import os, dotenv
 import cv2 as cv
-from glob import glob
-import os
 import numpy as np
-from utils.poincare import calculate_singularities
+# from utils.poincare import calculate_singularities
 from utils.segmentation import create_segmented_and_variance_images
 from utils.normalization import normalize
 from utils.gabor_filter import gabor_filter
 from utils.frequency import ridge_freq
 from utils import orientation
-from utils.crossing_number import calculate_minutiaes
+from utils.crossing_number import *
 from tqdm import tqdm
 from utils.skeletonize import skeletonize
-from utils.match_templates import match_templates
+from utils.show_image import show_image
+from utils.binarization import binarization
 
+dotenv.load_dotenv()
 
-def fingerprint_pipeline(input_img):
+def preprocess_image(input_img: np.ndarray) -> np.ndarray:
+    """
+        Preprocess the image using the following pipeline: gaussian blur -> normalization -> segmentation -> binarization -> ridge orientation -> ridge frequency -> gabor filter -> thinning -> minutiaes -> singularities.
+
+        Args:
+            input_img (numpy.ndarray): The input image to be preprocessed.
+
+        Returns:
+            numpy.ndarray: The preprocessed image.
+        
+        Raises:
+            ValueError: If the input image is not a numpy.ndarray.
+    """
     block_size = 16
 
-    # pipe line picture re https://www.cse.iitk.ac.in/users/biometrics/pages/111.JPG
-    # normalization -> orientation -> frequency -> mask -> filtering
+    # 1. Apply Gaussian Blur to reduce noise
+    blurred = cv.GaussianBlur(input_img, (5, 5), 0)
+    show_image("Blurred Image", blurred)
 
-    # normalization - removes the effects of sensor noise and finger pressure differences.
-    normalized_img = normalize(input_img.copy(), float(100), float(100))
+    # 2. Normalization - removes the effects of sensor noise and finger pressure differences.
+    normalized_img = normalize(blurred.copy(), np.mean(blurred), np.std(blurred))
+    show_image("Normalized Image", normalized_img)
 
-    # color threshold
-    # threshold_img = normalized_img
-    # _, threshold_im = cv.threshold(normalized_img,127,255,cv.THRESH_OTSU)
-    # cv.imshow('color_threshold', normalized_img); cv.waitKeyEx()
+    # 3. ROI Segmentation and Variance Calculation
+    segmented_img, variance_img, mask = create_segmented_and_variance_images(normalized_img, block_size, 0.2)
+    show_image("Segmented Image", segmented_img)
+    show_image("Variance Image", variance_img)
 
-    # ROI and normalisation
-    (segmented_img, normim, mask) = create_segmented_and_variance_images(normalized_img, block_size, 0.2)
+    # 4. Binarization (thresholding) applied to the segmented image
+    binary_img = binarization(segmented_img)
+    show_image("Binarized Image", binary_img)
 
-    # orientations
-    angles = orientation.calculate_angles(normalized_img, W=block_size, smoth=False)
+    # 5. Ridge Orientation Calculation based on the binary image
+    angles = orientation.calculate_angles(binary_img, W=block_size, smooth=True)
     orientation_img = orientation.visualize_angles(segmented_img, mask, angles, W=block_size)
+    show_image("Orientation Image", orientation_img)
 
-    # find the overall frequency of ridges in Wavelet Domain
-    freq = ridge_freq(normim, mask, angles, block_size, kernel_size=5, minWaveLength=5, maxWaveLength=15)
+    # 6. Ridge frequency estimation in Wavelet Domain using the variance image
+    # TODO: This is not working as expected and returns a gray image
+    freq = ridge_freq(variance_img, mask, angles, block_size, kernel_size=5, minWaveLength=5, maxWaveLength=15)
+    show_image("Ridge Frequency Image", freq)
 
-    # create gabor filter and do the actual filtering
-    gabor_img = gabor_filter(normim, angles, freq)
+    # 7. Gabor filtering - Enhance ridges using Gabor filter
+    gabor_img = gabor_filter(variance_img, angles, freq)
+    show_image("Gabor Filtered Image", gabor_img)
 
-    # thinning oor skeletonize
+    # 8. Skeletonization (thinning)
     thin_image = skeletonize(gabor_img)
+    show_image("Skeleton Image", thin_image)
 
-    # minutias
-    minutias = calculate_minutiaes(thin_image)
+    # 9. Minutiae detection
+    minutiaes_img, minutiae_points = calculate_minutiaes(thin_image)
+    show_image("Minutiaes Image", minutiaes_img)
 
-    # singularities
-    singularities_img = calculate_singularities(thin_image, angles, 1, block_size, mask)
+    return minutiaes_img, minutiae_points
 
-    # visualize pipeline stage by stage
-    output_imgs = [input_img, normalized_img, segmented_img, orientation_img, gabor_img, thin_image, minutias, singularities_img]
+    # # 10. Singularities detection
+    # singularities_img = calculate_singularities(thin_image, angles, 1, block_size, mask)
+    # show_image("Singularities Image", singularities_img)
+
+    return minutiaes
+
+    # Visualize pipeline stage by stage
+    output_imgs = [input_img, normalized_img, segmented_img, orientation_img, gabor_img, thin_image, minutiaes, singularities_img]
     for i in range(len(output_imgs)):
         if len(output_imgs[i].shape) == 2:
             output_imgs[i] = cv.cvtColor(output_imgs[i], cv.COLOR_GRAY2RGB)
@@ -59,27 +86,31 @@ def fingerprint_pipeline(input_img):
 
     return results
 
+def open_images(img_paths):
+    return [cv.imread(img_path, cv.IMREAD_GRAYSCALE) for img_path in img_paths]
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     # Open images
-    img_paths = ['./input/huella1.png', './input/huella2.png']
-    captured_template = cv.imread(img_paths[0], 0)
-    stored_template = cv.imread(img_paths[1], 0)
-    output_dir = './output/'
+    img_paths = [
+        f"""{os.getenv("IMAGE_PATH")}/huella1.png""", 
+        f"""{os.getenv("IMAGE_PATH")}/huella2.png"""
+    ]
+    output_dir = "./output/"
 
-    def open_images(paths):
-        return [cv.imread(img_path, 0) for img_path in paths]
-
+    # Open images in grayscale
     images = open_images(img_paths)
 
     # Image pipeline
+    processed_images = []
+    minutiae_sets = []
     os.makedirs(output_dir, exist_ok=True)
     for i, img in enumerate(tqdm(images)):
-        results = fingerprint_pipeline(img)
+        resulting_img, minutiae_points = preprocess_image(img)
+        processed_images.append(resulting_img)
+        minutiae_sets.append(minutiae_points)
+        # cv.imwrite(os.path.join(output_dir, f"{i}.png"), results)
 
-        # Finally, calculate the dissimilarity score between the two fingerprints
-        score = match_templates(results)
-        print(f'Dissimilarity score: {score}')
-
-        cv.imwrite(os.path.join(output_dir, f'{i}.png'), results)
-        # cv.imshow('image pipeline', results); cv.waitKeyEx()
+    # Match minutiae and compute dissimilarity
+    dissimilarity_index = compute_dissimilarity(minutiae_sets[0], minutiae_sets[1])
+    print(f"Dissimilarity Index: {dissimilarity_index}")
+    

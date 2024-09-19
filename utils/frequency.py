@@ -20,7 +20,7 @@ def frequest(im, orientim, kernel_size, minWaveLength, maxWaveLength):
     block_orient = math.atan2(sinorient,cosorient)/2
     
     # Rotate the image block so that the ridges are vertical
-    rotim = scipy.ndimage.rotate(im,block_orient/np.pi*180 + 90,axes=(1,0),reshape = False,order = 3,mode = 'nearest')
+    rotim = scipy.ndimage.rotate(im,block_orient/np.pi*180 + 90,axes=(1,0),reshape=True,order = 3,mode = 'nearest')
 
     # Now crop the image so that the rotated image does not contain any invalid regions.
     cropsze = int(np.fix(rows/np.sqrt(2)))

@@ -41,6 +41,7 @@ pymdptoolbox
 pyparsing
 pyrsistent
 python-dateutil
+python-dotenv
 PyWavelets
 pyzmq
 qtconsole

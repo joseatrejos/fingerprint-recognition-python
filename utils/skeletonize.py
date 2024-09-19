@@ -1,90 +1,82 @@
-"""
-To facilitate extraction of minutiae the image must be skeletonized: a sequence of morphological
-erosion operations will reduce the thickness of the striations until the latter is equal to one pixel
-while maintaining the connectivity of the striations ( That is to say that the continuity of the
-striaes must be respected, holes must not be inserted). While some papers use Rosenfeld algorithm for its
-simplicity. [https://airccj.org/CSCP/vol7/csit76809.pdf pg.91] I used skimage Zha84 A fast parallel algorithm for
-thinning digital patterns, T. Y. Zhang and C. Y. Suen, Communications of the ACM, March 1984, Volume 27, Number 3.
-"""
 import numpy as np
 import cv2 as cv
-from utils.crossing_number import calculate_minutiaes
 from skimage.morphology import skeletonize as skelt
-from skimage.morphology import thin
+
 def skeletonize(image_input):
     """
-    https://scikit-image.org/docs/dev/auto_examples/edges/plot_skeleton.html
-    Skeletonization reduces binary objects to 1 pixel wide representations.
-    skeletonize works by making successive passes of the image. On each pass, border pixels are identified
-    and removed on the condition that they do not break the connectivity of the corresponding object.
+    Skeletonization reduces binary objects to 1 pixel wide representations using Zhang-Suen algorithm.
+    This helps extract minutiae from the thinned fingerprint ridges.
     :param image_input: 2d array uint8
-    :return:
+    :return: Skeletonized image
     """
+    # Invert the image so ridges are white and background is black
     image = np.zeros_like(image_input)
     image[image_input == 0] = 1.0
-    output = np.zeros_like(image_input)
-
+    
+    # Perform Zhang-Suen skeletonization
     skeleton = skelt(image)
 
-    """uncomment for testing"""
-    # thinned = thin(image)
-    # thinned_partial = thin(image, max_iter=25)
-    #
-    # def minu_(skeleton, name):
-    #     cv.imshow('thin_'+name, output)
-    #     cv.bitwise_not(output, output)
-    #     minutias = calculate_minutiaes(output, kernel_size=5); cv.imshow('minu_'+name, minutias)
-    # # minu_(output, 'skeleton')
-    # # minu_(output, 'thinned')
-    # # minu_(output, 'thinned_partial')
-    # # cv.waitKeyEx()
-
-    output[skeleton] = 255
+    # Initialize output image
+    output = np.zeros_like(image_input)
+    output[skeleton] = 255  # Mark skeleton with white pixels
+    
+    # Invert back the skeleton to match the original input format (ridges as black)
     cv.bitwise_not(output, output)
-
+        
     return output
 
 
 def thinning_morph(image, kernel):
     """
-    Thinning image using morphological operations
+    Thinning image using morphological operations (erosion and dilation)
     :param image: 2d array uint8
-    :param kernel: 3x3 2d array unint8
-    :return: thin images
+    :param kernel: 3x3 2d array uint8
+    :return: Thinned image
     """
-    thining_image = np.zeros_like(image)
+    thinning_image = np.zeros_like(image)
     img = image.copy()
 
-    while 1:
-        erosion = cv.erode(img, kernel, iterations = 1)
-        dilatate = cv.dilate(erosion, kernel, iterations = 1)
+    while True:
+        # Perform morphological erosion and dilation
+        erosion = cv.erode(img, kernel, iterations=1)
+        dilatation = cv.dilate(erosion, kernel, iterations=1)
 
-        subs_img = np.subtract(img, dilatate)
-        cv.bitwise_or(thining_image, subs_img, thining_image)
+        # Subtract the dilated image from the original to get the thinning result
+        subs_img = np.subtract(img, dilatation)
+        cv.bitwise_or(thinning_image, subs_img, thinning_image)
+
+        # Update the image to the eroded version for the next iteration
         img = erosion.copy()
 
-        done = (np.sum(img) == 0)
+        # Stop when the image is fully eroded
+        if np.sum(img) == 0:
+            break
 
-        if done:
-          break
+    # Shift down and compare with one pixel offset to clean up artifacts
+    down = np.zeros_like(thinning_image)
+    down[1:-1, :] = thinning_image[0:-2, :]
+    down_mask = np.subtract(down, thinning_image)
+    down_mask[0:-2, :] = down_mask[1:-1, :]
+    cv.imshow('Down Shift Mask', down_mask)
 
-    # shift down and compare one pixel offset
-    down = np.zeros_like(thining_image)
-    down[1:-1, :] = thining_image[0:-2, ]
-    down_mask = np.subtract(down, thining_image)
-    down_mask[0:-2, :] = down_mask[1:-1, ]
-    cv.imshow('down', down_mask)
-
-    # shift right and compare one pixel offset
-    left = np.zeros_like(thining_image)
-    left[:, 1:-1] = thining_image[:, 0:-2]
-    left_mask = np.subtract(left, thining_image)
+    # Shift right and compare with one pixel offset
+    left = np.zeros_like(thinning_image)
+    left[:, 1:-1] = thinning_image[:, 0:-2]
+    left_mask = np.subtract(left, thinning_image)
     left_mask[:, 0:-2] = left_mask[:, 1:-1]
-    cv.imshow('left', left_mask)
+    cv.imshow('Left Shift Mask', left_mask)
 
-    # combine left and down mask
-    cv.bitwise_or(down_mask, down_mask, thining_image)
-    output = np.zeros_like(thining_image)
-    output[thining_image < 250] = 255
+    # Combine left and down masks to clean artifacts
+    cv.bitwise_or(down_mask, down_mask, thinning_image)
+
+    # Invert the final thinned image to match the input format (black ridges)
+    output = np.zeros_like(thinning_image)
+    output[thinning_image < 250] = 255
+
+    # Visualize the result of morphological thinning
+    cv.imshow('Morphological Thinning Result', output)
+    
+    cv.waitKey(0)
+    cv.destroyAllWindows()
 
     return output

@@ -14,48 +14,59 @@ optimize the extraction phase of the biometric data.
 import numpy as np
 import cv2 as cv
 
-
 def normalise(img):
-    return (img - np.mean(img))/(np.std(img))
+    """Normalize an image to have zero mean and unit variance."""
+    return (img - np.mean(img)) / np.std(img)
 
-
-def create_segmented_and_variance_images(im, w, threshold=.2):
+def create_segmented_and_variance_images(im, w, threshold=0.2):
     """
-    Returns mask identifying the ROI. Calculates the standard deviation in each image block and threshold the ROI
-    It also normalises the intesity values of
-    the image so that the ridge regions have zero mean, unit standard
-    deviation.
-    :param im: Image
-    :param w: size of the block
-    :param threshold: std threshold
-    :return: segmented_image
+    Segment an image by calculating the standard deviation in image blocks and applying a threshold to find the ROI.
+    
+    Args:
+        im (numpy.ndarray): Input image.
+        w (int): Size of the block (W × W) for variance calculation.
+        threshold (float): Threshold for standard deviation to identify background areas.
+
+    Returns:
+        tuple: (segmented_image, normalized_image, mask)
+            - segmented_image (numpy.ndarray): The segmented image where background regions are masked out.
+            - normalized_image (numpy.ndarray): Normalized image (masked regions have zero mean, unit std).
+            - mask (numpy.ndarray): Binary mask identifying the regions of interest (ROI).
     """
     (y, x) = im.shape
-    threshold = np.std(im)*threshold
 
+    # Threshold based on the overall image standard deviation
+    threshold = np.std(im) * threshold
+
+    # Initialize image variance map and mask
     image_variance = np.zeros(im.shape)
     segmented_image = im.copy()
     mask = np.ones_like(im)
 
+    # Iterate over blocks and compute block standard deviation
     for i in range(0, x, w):
         for j in range(0, y, w):
             box = [i, j, min(i + w, x), min(j + w, y)]
-            block_stddev = np.std(im[box[1]:box[3], box[0]:box[2]])
+            block = im[box[1]:box[3], box[0]:box[2]]
+            block_stddev = np.std(block)
             image_variance[box[1]:box[3], box[0]:box[2]] = block_stddev
 
-    # apply threshold
+    # Apply threshold to create the mask (background areas will have std < threshold)
     mask[image_variance < threshold] = 0
 
-    # smooth mask with a open/close morphological filter
-    kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE,(w*2, w*2))
+    # Smooth the mask using morphological operations
+    kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, (w * 2, w * 2))
     mask = cv.morphologyEx(mask, cv.MORPH_OPEN, kernel)
     mask = cv.morphologyEx(mask, cv.MORPH_CLOSE, kernel)
 
-    # normalize segmented image
+    # Apply the mask to the segmented image
     segmented_image *= mask
+
+    # Normalize the image only within the valid (non-background) regions
     im = normalise(im)
-    mean_val = np.mean(im[mask==0])
-    std_val = np.std(im[mask==0])
-    norm_img = (im - mean_val)/(std_val)
+    valid_region = im[mask == 1]
+    mean_val = np.mean(valid_region)
+    std_val = np.std(valid_region)
+    norm_img = (im - mean_val) / std_val
 
     return segmented_image, norm_img, mask

@@ -61,7 +61,7 @@ def ridge_freq(im, mask, orient, block_size, kernel_size, minWaveLength, maxWave
             angle_block = orient[row // block_size][col // block_size]
             if angle_block:
                 freq[row:row + block_size][:, col:col + block_size] = frequest(image_block, angle_block, kernel_size,
-                                                                               minWaveLength, maxWaveLength)
+                minWaveLength, maxWaveLength)
 
     freq = freq*mask
     freq_1d = np.reshape(freq,(1,rows*cols))

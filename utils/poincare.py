@@ -1,4 +1,3 @@
-from utils import orientation
 import math
 import cv2 as cv
 import numpy as np
@@ -56,10 +55,3 @@ def calculate_singularities(im, angles, tolerance, W, mask):
                     cv.rectangle(result, ((j+0)*W, (i+0)*W), ((j+1)*W, (i+1)*W), colors[singularity], 3)
 
     return result
-
-
-if __name__ == '__main__':
-    img = cv.imread('../test_img.png', 0)
-    cv.imshow('original', img)
-    angles = orientation.calculate_angles(img, 16, smoth=True)
-    result = calculate_singularities(img, angles, 1, 16)
